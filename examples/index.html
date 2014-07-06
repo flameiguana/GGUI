@@ -1,0 +1,44 @@
+<html>
+<head>
+<title>GUIFramework</title>
+<script id="GGUI" type="text/javascript" src="../src/GGUI.js"></script>
+<script type="text/javascript">
+
+var context = null;
+var panel = null;
+
+
+function Init()
+{
+    var canvas = document.getElementById("maincanvas");
+    context = canvas.getContext("2d");
+
+    panel = new GGUI.Panel(canvas);
+
+    panel.addChild(new GGUI.CheckBox(80, 30, 20, 20));
+    panel.addChild(new GGUI.Label(80 + 20 + 10, 45, "Check Me", 16));
+    var textbox = new GGUI.TextBox(30, 100, 200, 60, 16);
+    panel.addChild(textbox);
+    var button = new GGUI.Button(240, 105, 40, 30);
+    button.setOnClick(textbox.clearText.bind(textbox));
+    panel.addChild(button);
+    Update();
+}
+
+function printMessage(){
+    console.log("yo bugg");
+}
+
+function Update()
+{
+    panel.draw();
+    requestAnimationFrame(Update);
+}
+
+
+</script>
+</head>
+<body onload="Init();">
+<canvas id="maincanvas" width="400" height="400" tabindex="0"></canvas>
+</body>
+</html>
