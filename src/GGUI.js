@@ -1,7 +1,7 @@
 //the equivalent of a namespace in javascript
 var GGUI = {};
 
-//functions from starter code
+/*-------functions from starter code*/
 GGUI.drawRect = function(context, rect, filled, color)
 {
     if (filled)
@@ -32,11 +32,13 @@ GGUI.styleText = function(context, color, size, bold)
     context.fillStyle = color;
 }
 
+
+/*--------text formatting/drawing functions--------*/
 GGUI.drawText = function(context, text, position){
 	context.fillText(text, position.x, position.y);
 }
 
-//Specialty text drawing functions
+//Lines are split up as elements in array
 GGUI.drawTextBlock = function(context, block, x, y, lineHeight, maxLines){
 	maxLines = block.length < maxLines ? block.length : maxLines;
 	for(var i = 0; i < maxLines; i++){
@@ -151,9 +153,6 @@ GGUI.Button = function(x, y, width, height, normal, pressed) {
 
 GGUI.Button.prototype = {
 	contructor: GGUI.Button,
-	setLabel: function(text){
-		
-	},
 	setOnClick: function(callback) {
 		this._clickCallback = callback;
 	},
@@ -226,15 +225,17 @@ GGUI.Label.prototype = {
 	}
 };
 
-//An basic text box you can type text into.
+//An basic text box you can type text into. Does not show a cursor or
+//support special characters like tab or enter
 GGUI.TextBox = function(x, y, width, height, fontSize) {
 	this.rect = new GGUI.Rect(x, y, width, height);
 	this.rawText = "";
 	this.formattedText = [];
 	this.needReformat = true;
+	this._ignoreInput = false;
 	this.fontSize = fontSize;
-	//hide overflow text input. Limiting input could also work.
-	this.maxLines = height / fontSize - 1;
+	//The lines that can fit in the box
+	this.maxLines = Math.floor(height / fontSize - 1);
 	//this.fontSize = height / lines;
 	this.textPosition = new GGUI.Point(this.rect.position.x, 
 						this.rect.position.y + this.fontSize);
@@ -246,11 +247,17 @@ GGUI.TextBox = function(x, y, width, height, fontSize) {
 GGUI.TextBox.prototype = {
 	constructor: GGUI.TextBox,
 	mouseDown: function(){
-
+		//could be used to set cursor position or hightlight text box
+	},
+	setText: function(text){
+		this.rawText = text;
+		this.needReformat = true;
 	},
 	inputText: function(text){
-		this.rawText += text;
-		this.needReformat = true;
+		if(!this._ignoreInput){
+			this.rawText += text;
+			this.needReformat = true;
+		}
 	},
 	specialKey: function(key){
 		if(key === 8){
@@ -278,6 +285,8 @@ GGUI.TextBox.prototype = {
 		//lets save those cycles
 		if(this.needReformat){
 			this.formattedText = GGUI.wrapText(context2D, this.rawText, this.rect.width);
+			//Dont' allow further text input. Last word may still wrap. possible solution is a callback
+			this._ignoreInput = this.formattedText.length > this.maxLines;
 			this.needReformat = false;
 		}
 		GGUI.drawTextBlock(context2D, this.formattedText, this.textPosition.x, this.textPosition.y,
@@ -315,7 +324,7 @@ GGUI.Panel = function(canvas){
 GGUI.Panel.prototype = {
 	contructor: GGUI.Panel,
 	draw: function(){
-		context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		this.context2D.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		var i;
 		for(i = 0; i < this.interactiveObjs.length; i++){
 			this.interactiveObjs[i].draw(this.context2D);
@@ -324,9 +333,9 @@ GGUI.Panel.prototype = {
 			this.staticObjs[i].draw(this.context2D);
 		}
 	},
-	//If I were to look more into a type system for javascript, I could probably 
-	//overload this function for each type of object and add it to the appropriate list.
-	//For now I'm just using duck typing.
+
+	//In hindsight this should have been converted to a set of factory functions (like addButton).
+	// For now I'm just using duck typing.
 	addChild: function(child){
 		if(child){
 			if(typeof child.mouseDown === 'function'){
