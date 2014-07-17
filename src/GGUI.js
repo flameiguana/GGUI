@@ -36,6 +36,7 @@ GGUI.drawText = function(context, text, position){
 	context.fillText(text, position.x, position.y);
 }
 
+//Specialty text drawing functions
 GGUI.drawTextBlock = function(context, block, x, y, lineHeight, maxLines){
 	maxLines = block.length < maxLines ? block.length : maxLines;
 	for(var i = 0; i < maxLines; i++){
@@ -44,65 +45,67 @@ GGUI.drawTextBlock = function(context, block, x, y, lineHeight, maxLines){
 	}
 }
 
-//Wraps text to a specified width. Based on behaviour of notepad.
+//Truncates word based on a max canvas relative width
+GGUI.truncateWord = function(context, word, maxWidth){
+	var choppedWord = word;
+	//Since there is no consistent way to predict length, measure text char by char
+	for(var i = 0; i < word.length; i++){
+		var choppedWord = word.slice(0, i);
+		var slicedWidth = context.measureText(choppedWord).width;
+		//we're done but we went one character over.
+		if(slicedWidth > maxWidth){
+			choppedWord = choppedWord.slice(0, -1); //remove extra char
+			break;
+		}
+	}
+	return choppedWord;
+}
+
+//Wraps a body of text to a specified width. Based on observed behaviour of windows notepad.
 GGUI.wrapText = function(context, text, maxWidth) {
 	var words = text.split(" ");
-	var line = "";
+	var fittingLine = "";
 	var lines = [];
 	var wordsInLine = 0;
 	var addWord = true;
 	var i = 0;
 	while(i < words.length) {
-		var tempLine = null;
-		if(addWord === true){
-			tempLine = line + words[i] + " ";
+		var lineBuffer = fittingLine;
+
+		if(addWord){
+			lineBuffer = fittingLine + words[i] + " ";
 			wordsInLine++;
 		}
-		else {
-			tempLine = line;
-		} 
 		//gets pixel size of text
-		var tempWidth = context.measureText(tempLine).width;
+		var measuredWidth = context.measureText(lineBuffer).width;
 		//Handle all cases where our line doesn't fit.
-		if (tempWidth > maxWidth) {
-			//When there is more than one word on this line, just put the
-			//last word on a new line so that the words before that one fit on
-			//one line
+		if (measuredWidth > maxWidth) {
+			//When there is more than one word on this line, move the last word to a new line
 			if(wordsInLine > 1){
-				lines.push(line);
-				line = words[i] + " ";
-				wordsInLine = 1;
-				//hold off on adding a new word in case last word doesn't fit either
-				addWord = false; 
+				lines.push(fittingLine);
+				fittingLine = words[i] + " ";
 			}
-			//There is only one word on this line, so we should split it up.
+			//There is only one word on this line, but it doesnt fit, so we should split it up.
 			else {
-				//gonna have to loop char by char
-				var splitLine = "";
-				for(var c = 0; c < tempLine.length; c++){
-					splitLine = splitLine + tempLine.charAt(c);
-					var tempWidth = context.measureText(splitLine).width;
-					if(tempWidth > maxWidth){
-						splitLine = splitLine.slice(0, -1); //remove extra char
-						break;
-					}
-				}
+				var splitLine = GGUI.truncateWord(context, lineBuffer, maxWidth);
 				lines.push(splitLine);
 				//put rest of word on next line (note space is already there)
-				line = tempLine.slice(splitLine.length);
-				wordsInLine = 1;
-				//once again, the word may be too long, so hold off on adding additional words
-				addWord = false;
+				fittingLine = lineBuffer.slice(splitLine.length);
 			}
+			//back to one word in both cases
+			wordsInLine = 1;
+			//even the split up word may be too long, so hold off on adding additional words
+			addWord = false;
 		}
-		//our current line fits, so add a new word
+		//current line fits, so add a new word
 		else {
-			line = tempLine;
+			fittingLine = lineBuffer;
 			addWord = true;
 			i++;
 		}
 	}
-	lines.push(line);
+
+	lines.push(fittingLine);
 	return lines;
 }
 
@@ -133,7 +136,6 @@ GGUI.Rect.prototype = {
 };
 
 /*---- UI objects------*/
-
 
 //A button that can call a function when clicked on.
 GGUI.Button = function(x, y, width, height, normal, pressed) {
@@ -167,11 +169,6 @@ GGUI.Button.prototype = {
 		this.pressed = false;
 		this.currColor = this.normalColor;
 	},
-	//note mouseDown has the functionality of "select", so we dont
-	//need a special function for that.
-	unselect: function(){
-
-	},
 	draw: function(context2D) {
 		context2D.fillStyle = this.currColor;
 		context2D.fillRect(this.rect.position.x, this.rect.position.y, 
@@ -198,18 +195,19 @@ GGUI.CheckBox.prototype = {
 	mouseDown: function(){
 		this.checked = !this.checked;
 	},
-	unselect: function(){
-
-	},
 	draw: function(context2D){
 		GGUI.drawRect(context2D, this.rect, false, this.outlineColor);
 		var color = this.emptyColor;
 		if(this.checked)
 			color = this.fillColor;
 		GGUI.drawRect(context2D, this.innerRect, true, color);
-	}		
+	},
+	isChecked: function(){
+		return this.checked;
+	}	
 };
 
+//Simple text label
 GGUI.Label = function(x, y, text, fontSize, color){
 	this.position = new GGUI.Point(x, y);
 	this.text = text || "";
@@ -235,7 +233,7 @@ GGUI.TextBox = function(x, y, width, height, fontSize) {
 	this.formattedText = [];
 	this.needReformat = true;
 	this.fontSize = fontSize;
-	//hide overflow text. Limiting input could also work.
+	//hide overflow text input. Limiting input could also work.
 	this.maxLines = height / fontSize - 1;
 	//this.fontSize = height / lines;
 	this.textPosition = new GGUI.Point(this.rect.position.x, 
@@ -258,6 +256,9 @@ GGUI.TextBox.prototype = {
 		if(key === 8){
 			this.deleteText(1);
 		}
+		else if(key === 13){
+			this.inputText("\n");
+		}
 	},
 	//removes a certain amount of characters off the end.
 	deleteText: function(count){
@@ -270,9 +271,6 @@ GGUI.TextBox.prototype = {
 	clearText: function(){
 		this.rawText = "";
 		this.needReformat = true;
-	},
-	unselect: function(){
-
 	},
 	draw: function(context2D){
 		GGUI.drawRect(context2D, this.rect, false, this.outlineColor);
@@ -289,11 +287,12 @@ GGUI.TextBox.prototype = {
 
 /*
 	One panel per canvas means we can use different canvases for different layers,
-	which apparently is more efficient. Having said this, I didn't add support
+	which apparently is more efficient. Having said this, I didn't actually add support
 	for multiple layers, so clicking and stuff will affect all layers.
 	http://www.html5rocks.com/en/tutorials/canvas/performance/
 */
-//
+
+//Handles draw calls of all children, as well as mouse and keyboard events
 GGUI.Panel = function(canvas){
 	this.canvas = canvas;
 	this.canvas.addEventListener('mousedown', this._downEvent.bind(this), false);
@@ -325,7 +324,7 @@ GGUI.Panel.prototype = {
 			this.staticObjs[i].draw(this.context2D);
 		}
 	},
-	//If I were to look more into the type system of javascript, I could probably 
+	//If I were to look more into a type system for javascript, I could probably 
 	//overload this function for each type of object and add it to the appropriate list.
 	//For now I'm just using duck typing.
 	addChild: function(child){
@@ -343,17 +342,12 @@ GGUI.Panel.prototype = {
 		var mousePointer = new GGUI.Point(mEvent.clientX - this._cOffset.x,
 							 mEvent.clientY - this._cOffset.y);
 
-		//only call on interactiveObjs hit by pointer
+		//only notify interactiveObjs hit by pointer
 		for(var i = 0; i < this.interactiveObjs.length; i++){
 			if(this.interactiveObjs[i].rect.containsPoint(mousePointer)){
 				var selected = this.interactiveObjs[i];
 				selected.mouseDown();
-				//change reference of selected item.
-				if(selected !== this.selectedChild){
-					if(this.selectedChild !== null)
-						this.selectedChild.unselect();
-					this.selectedChild = selected;
-				}
+				this.selectedChild = selected;
 				break;
 			}
 		}
@@ -365,6 +359,7 @@ GGUI.Panel.prototype = {
 				this.interactiveObjs[i].mouseUp();
 		}
 	},
+	//could be used for fancy hover effects.
 	_moveEvent: function(mEvent){
 
 	},
@@ -374,15 +369,15 @@ GGUI.Panel.prototype = {
 	_keyEvent: function(kEvent){
 
 		//Hanle special keys
-		if(kEvent.keyCode === 8 || kEvent.keyCode === 13){ //backspace
+		if(kEvent.keyCode === 8 || kEvent.keyCode === 13){ //backspace and enter
 
 			if(this.selectedChild && typeof this.selectedChild.specialKey === 'function'){
-				//implementationn dependent, just pass the key
+				//implementation dependant, just pass the key
 				this.selectedChild.specialKey(kEvent.keyCode); 
 			}
 			kEvent.preventDefault();
 			kEvent.stopPropagation();
-			return false;
+			return false; //some browsers use this to stop propagation
 		}
 
 		//don't take every key as text input, wait for keypress event
